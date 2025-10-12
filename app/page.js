@@ -1,103 +1,98 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import React, { useState } from 'react';
+import { Upload, FileText, Zap, CheckCircle, BookOpen } from 'lucide-react';
+
+export default function HomePage() {
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              app/page.js
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 p-8">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-12">
+          <h1 className="text-5xl font-bold text-white mb-4">
+            🎬 Truyện → Video AI
+          </h1>
+          <p className="text-xl text-purple-200 mb-6">
+            Chuyển văn bản thành video tự động
+          </p>
+          
+          {/* Navigation Buttons */}
+          <div className="flex gap-4 justify-center">
+            <a 
+              href="/upload"
+              className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl transition-all font-semibold text-lg"
+            >
+              <Upload size={24} />
+              <span>Upload Chương Mới</span>
+            </a>
+            
+            <a 
+              href="/series"
+              className="inline-flex items-center gap-2 px-8 py-4 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all border border-white/20 font-semibold text-lg"
+            >
+              <BookOpen size={24} />
+              <span>Quản lý Bộ Truyện</span>
+            </a>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+
+        {/* Main Card - Demo Features */}
+        <div className="bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl p-8 border border-white/20">
+          <h2 className="text-3xl font-bold text-white mb-6 text-center">
+            ✨ Tính năng chính
+          </h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Feature 1 */}
+            <div className="bg-white/5 rounded-xl p-6 border border-white/10">
+              <div className="text-4xl mb-4">📚</div>
+              <h3 className="text-xl font-bold text-white mb-2">Quản lý bộ truyện</h3>
+              <p className="text-white/70">
+                Tạo và quản lý nhiều bộ truyện, mỗi bộ có nhiều chương
+              </p>
+            </div>
+            
+            {/* Feature 2 */}
+            <div className="bg-white/5 rounded-xl p-6 border border-white/10">
+              <div className="text-4xl mb-4">🤖</div>
+              <h3 className="text-xl font-bold text-white mb-2">AI phân tích</h3>
+              <p className="text-white/70">
+                Tự động nhận diện nhân vật, địa điểm và tạo cảnh phim
+              </p>
+            </div>
+            
+            {/* Feature 3 */}
+            <div className="bg-white/5 rounded-xl p-6 border border-white/10">
+              <div className="text-4xl mb-4">🎬</div>
+              <h3 className="text-xl font-bold text-white mb-2">Tạo video</h3>
+              <p className="text-white/70">
+                Chuyển đổi văn bản thành video với nhân vật nhất quán
+              </p>
+            </div>
+          </div>
+          
+          {/* Stats */}
+          <div className="mt-8 grid grid-cols-3 gap-4 pt-8 border-t border-white/10">
+            <div className="text-center">
+              <p className="text-4xl font-bold text-white mb-2">∞</p>
+              <p className="text-white/60">Bộ truyện</p>
+            </div>
+            <div className="text-center">
+              <p className="text-4xl font-bold text-white mb-2">AI</p>
+              <p className="text-white/60">Phân tích thông minh</p>
+            </div>
+            <div className="text-center">
+              <p className="text-4xl font-bold text-white mb-2">4K</p>
+              <p className="text-white/60">Video chất lượng cao</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Info Footer */}
+        <div className="mt-8 text-center text-white/60 text-sm">
+          💡 Tip: Văn bản càng chi tiết, video càng chính xác
+        </div>
+      </div>
     </div>
   );
 }
