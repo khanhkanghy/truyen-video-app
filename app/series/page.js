@@ -2,12 +2,20 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { BookOpen, Plus, Edit, Film, Users, ArrowLeft } from 'lucide-react';
-import Link from 'next/link'; // ← THÊM DÒNG NÀY
+import { BookOpen, Plus, Edit, Film, Users, ArrowLeft, AlertCircle } from 'lucide-react';
+import Link from 'next/link';
+import LoadingSpinner from '@/app/components/LoadingSpinner';
+import ErrorMessage from '@/app/components/ErrorMessage';
 
 export default function SeriesManagePage() {
   const [series, setSeries] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [stats, setStats] = useState({
+    totalSeries: 0,
+    totalChapters: 0,
+    activeSeries: 0
+  });
 
   useEffect(() => {
     fetchSeries();
@@ -15,49 +23,109 @@ export default function SeriesManagePage() {
 
   const fetchSeries = async () => {
     try {
-      const { data, error } = await supabase
+      setLoading(true);
+      setError(null);
+
+      // Lấy danh sách series
+      const { data, error: fetchError } = await supabase
         .from('series')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (fetchError) throw fetchError;
 
-      // Đếm số chapters cho mỗi series
-      const seriesWithStats = await Promise.all(
-        (data || []).map(async (item) => {
-          const { count } = await supabase
-            .from('chapters')
-            .select('*', { count: 'exact', head: true })
-            .eq('series_id', item.id);
-          
-          return { ...item, chapters_count: count || 0 };
-        })
-      );
+      // Nếu không có data
+      if (!data) {
+        setSeries([]);
+        setStats({
+          totalSeries: 0,
+          totalChapters: 0,
+          activeSeries: 0
+        });
+        return;
+      }
 
-      setSeries(seriesWithStats);
-    } catch (error) {
-      console.error('Error:', error);
+      // Đếm số chapters cho mỗi series (optimized query)
+      const seriesIds = data.map(s => s.id);
+      
+      if (seriesIds.length > 0) {
+        const { data: chaptersCount } = await supabase
+          .from('chapters')
+          .select('series_id')
+          .in('series_id', seriesIds);
+
+        // Đếm chapters cho mỗi series
+        const chapterCountMap = {};
+        if (chaptersCount) {
+          chaptersCount.forEach(ch => {
+            chapterCountMap[ch.series_id] = (chapterCountMap[ch.series_id] || 0) + 1;
+          });
+        }
+
+        // Gắn số chapters vào mỗi series
+        const seriesWithStats = data.map(item => ({
+          ...item,
+          chapters_count: chapterCountMap[item.id] || 0
+        }));
+
+        setSeries(seriesWithStats);
+        
+        // Tính stats
+        setStats({
+          totalSeries: seriesWithStats.length,
+          totalChapters: Object.values(chapterCountMap).reduce((sum, count) => sum + count, 0),
+          activeSeries: seriesWithStats.filter(s => s.status === 'active').length
+        });
+      } else {
+        setSeries([]);
+        setStats({
+          totalSeries: 0,
+          totalChapters: 0,
+          activeSeries: 0
+        });
+      }
+
+    } catch (err) {
+      console.error('Error fetching series:', err);
+      setError(err);
     } finally {
       setLoading(false);
     }
   };
 
   const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('vi-VN', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
+    if (!dateString) return 'Không rõ';
+    
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('vi-VN', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+    } catch {
+      return 'Không rõ';
+    }
   };
 
+  // Loading state
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-white mx-auto mb-4"></div>
-          <p className="text-white text-xl">Đang tải...</p>
-        </div>
+        <LoadingSpinner size="large" message="Đang tải danh sách bộ truyện..." />
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center">
+        <ErrorMessage 
+          error={error} 
+          retry={fetchSeries}
+          showHomeButton={true}
+        />
       </div>
     );
   }
@@ -82,12 +150,12 @@ export default function SeriesManagePage() {
                 📚 Quản lý Bộ Truyện
               </h1>
               <p className="text-purple-200">
-                Tổng cộng {series.length} bộ truyện
+                Tổng cộng {stats.totalSeries} bộ truyện
               </p>
             </div>
             <Link
               href="/upload"
-              className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl transition-all flex items-center gap-2 font-semibold"
+              className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl transition-all flex items-center gap-2 font-semibold shadow-lg hover:shadow-xl transform hover:scale-105"
             >
               <Plus size={20} />
               <span>Thêm chương mới</span>
@@ -97,35 +165,31 @@ export default function SeriesManagePage() {
 
         {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20 hover:border-purple-400/50 transition-all">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-white/60 text-sm mb-1">Tổng bộ truyện</p>
-                <p className="text-3xl font-bold text-white">{series.length}</p>
+                <p className="text-3xl font-bold text-white">{stats.totalSeries}</p>
               </div>
               <BookOpen className="text-purple-400" size={40} />
             </div>
           </div>
 
-          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20 hover:border-blue-400/50 transition-all">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-white/60 text-sm mb-1">Tổng chương</p>
-                <p className="text-3xl font-bold text-white">
-                  {series.reduce((sum, s) => sum + s.chapters_count, 0)}
-                </p>
+                <p className="text-3xl font-bold text-white">{stats.totalChapters}</p>
               </div>
               <Film className="text-blue-400" size={40} />
             </div>
           </div>
 
-          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20 hover:border-green-400/50 transition-all">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-white/60 text-sm mb-1">Đang hoạt động</p>
-                <p className="text-3xl font-bold text-white">
-                  {series.filter(s => s.status === 'active').length}
-                </p>
+                <p className="text-3xl font-bold text-white">{stats.activeSeries}</p>
               </div>
               <Film className="text-green-400" size={40} />
             </div>
@@ -144,7 +208,7 @@ export default function SeriesManagePage() {
             </p>
             <Link
               href="/upload"
-              className="inline-block px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition-all"
+              className="inline-block px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition-all transform hover:scale-105"
             >
               Upload ngay
             </Link>
@@ -154,25 +218,33 @@ export default function SeriesManagePage() {
             {series.map((item) => (
               <div
                 key={item.id}
-                className="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20 hover:border-purple-400/50 transition-all group"
+                className="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20 hover:border-purple-400/50 transition-all group hover:transform hover:scale-105"
               >
                 {/* Cover Image Placeholder */}
-                <div className="h-40 bg-gradient-to-br from-purple-600 to-pink-600 rounded-lg mb-4 flex items-center justify-center">
-                  <BookOpen className="text-white/30" size={64} />
+                <div className="h-40 bg-gradient-to-br from-purple-600 to-pink-600 rounded-lg mb-4 flex items-center justify-center overflow-hidden">
+                  {item.cover_image ? (
+                    <img 
+                      src={item.cover_image} 
+                      alt={item.title}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <BookOpen className="text-white/30" size={64} />
+                  )}
                 </div>
 
                 {/* Title */}
-                <h3 className="text-2xl font-bold text-white mb-2 group-hover:text-purple-300 transition-colors">
+                <h3 className="text-2xl font-bold text-white mb-2 group-hover:text-purple-300 transition-colors line-clamp-1">
                   {item.title}
                 </h3>
                 
                 {/* Description */}
-                <p className="text-white/70 mb-4 line-clamp-2 text-sm">
+                <p className="text-white/70 mb-4 line-clamp-2 text-sm min-h-[40px]">
                   {item.description || 'Chưa có mô tả'}
                 </p>
 
                 {/* Metadata */}
-                <div className="flex items-center gap-3 mb-4 flex-wrap">
+                <div className="flex items-center gap-2 mb-4 flex-wrap">
                   <span className="px-3 py-1 bg-purple-500/30 text-purple-200 rounded-full text-xs font-medium">
                     {item.genre}
                   </span>
@@ -198,7 +270,7 @@ export default function SeriesManagePage() {
                 <div className="space-y-2">
                   <Link
                     href={`/series/${item.id}`}
-                    className="w-full py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-all text-center text-sm font-medium flex items-center justify-center gap-2"
+                    className="w-full py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-all text-center text-sm font-medium flex items-center justify-center gap-2 shadow hover:shadow-lg"
                   >
                     <Film size={16} />
                     Xem chương & cảnh
@@ -225,6 +297,22 @@ export default function SeriesManagePage() {
             ))}
           </div>
         )}
+
+        {/* Help Section */}
+        <div className="mt-12 bg-blue-500/10 backdrop-blur-lg rounded-xl p-6 border border-blue-500/20">
+          <div className="flex items-start gap-4">
+            <AlertCircle className="text-blue-400 flex-shrink-0 mt-1" size={24} />
+            <div>
+              <h4 className="text-white font-semibold mb-2">💡 Mẹo sử dụng</h4>
+              <ul className="text-white/70 text-sm space-y-1">
+                <li>• Mỗi bộ truyện có thể có nhiều chương</li>
+                <li>• Mỗi chương sẽ được AI phân tích thành các cảnh</li>
+                <li>• Nhấn vào "Nhân vật" để quản lý các character của truyện</li>
+                <li>• Trạng thái "Hoạt động" nghĩa là đang trong quá trình sản xuất</li>
+              </ul>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
