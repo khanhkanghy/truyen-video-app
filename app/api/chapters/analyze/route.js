@@ -1,5 +1,15 @@
+/**
+ * Chapter Analysis API - UPGRADED WITH LLM
+ * Phân tích chương truyện sử dụng AI (OpenAI GPT-4o-mini)
+ */
+
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import {
+  analyzeSceneWithLLM,
+  generateEnhancedPrompt
+} from '@/lib/ai/llm';
+import { SCENE_CONFIG } from '@/lib/utils/constants';
 
 export async function POST(request) {
   try {
@@ -12,6 +22,11 @@ export async function POST(request) {
       );
     }
 
+    console.log('\n🚀 Starting AI-powered chapter analysis...');
+    console.log(`📚 Series ID: ${seriesId}`);
+    console.log(`📖 Chapter: ${chapterNumber || 1}`);
+    console.log(`📝 Content length: ${content.length} characters`);
+
     // 1. Lấy thông tin series và characters
     const { data: series, error: seriesError } = await supabase
       .from('series')
@@ -23,15 +38,24 @@ export async function POST(request) {
       .single();
 
     if (seriesError) {
-      console.error('Series error:', seriesError);
+      console.error('❌ Series error:', seriesError);
       return NextResponse.json(
         { success: false, error: 'Không tìm thấy bộ truyện' },
         { status: 404 }
       );
     }
 
-    // 2. Phân tích văn bản
+    console.log(`✅ Series loaded: ${series.title} (${series.genre})`);
+    console.log(`👥 Characters: ${series.characters?.length || 0}`);
+
+    // 2. ⭐ PHÂN TÍCH VĂN BẢN VỚI AI (UPGRADED)
     const analysis = await analyzeChapterWithAI(content, series);
+
+    console.log('\n📊 Analysis results:');
+    console.log(`  - Paragraphs: ${analysis.paragraphs.length}`);
+    console.log(`  - Scenes: ${analysis.totalScenes}`);
+    console.log(`  - Characters detected: ${analysis.detectedCharacters.length}`);
+    console.log(`  - Duration: ${analysis.estimatedDuration}`);
 
     // 3. Lưu chapter vào database
     const { data: chapter, error: chapterError } = await supabase
@@ -50,12 +74,14 @@ export async function POST(request) {
       .single();
 
     if (chapterError) {
-      console.error('Chapter error:', chapterError);
+      console.error('❌ Chapter error:', chapterError);
       return NextResponse.json(
         { success: false, error: chapterError.message },
         { status: 500 }
       );
     }
+
+    console.log(`✅ Chapter saved: ${chapter.id}`);
 
     // 4. Lưu paragraphs
     const paragraphsData = analysis.paragraphs.map((para, index) => ({
@@ -74,12 +100,14 @@ export async function POST(request) {
       .select();
 
     if (paraError) {
-      console.error('Paragraphs error:', paraError);
+      console.error('❌ Paragraphs error:', paraError);
       return NextResponse.json(
         { success: false, error: paraError.message },
         { status: 500 }
       );
     }
+
+    console.log(`✅ Paragraphs saved: ${paragraphs.length}`);
 
     // 5. Tạo scenes từ paragraphs
     const scenesData = [];
@@ -89,7 +117,7 @@ export async function POST(request) {
       if (para.scenes && para.scenes.length > 0) {
         for (const scene of para.scenes) {
           const paragraph = paragraphs.find(p => p.paragraph_number === para.number);
-          
+
           scenesData.push({
             paragraph_id: paragraph.id,
             chapter_id: chapter.id,
@@ -117,19 +145,26 @@ export async function POST(request) {
         .insert(scenesData);
 
       if (scenesError) {
-        console.error('Scenes error:', scenesError);
+        console.error('❌ Scenes error:', scenesError);
+      } else {
+        console.log(`✅ Scenes saved: ${scenesData.length}`);
       }
     }
 
     // 6. Cập nhật total_chapters của series
     const { error: updateError } = await supabase
       .from('series')
-      .update({ total_chapters: (series.total_chapters || 0) + 1 })
+      .update({
+        total_chapters: (series.total_chapters || 0) + 1,
+        updated_at: new Date().toISOString()
+      })
       .eq('id', seriesId);
 
     if (updateError) {
-      console.error('Update series error:', updateError);
+      console.error('⚠️ Update series error:', updateError);
     }
+
+    console.log('\n🎉 Chapter analysis completed successfully!\n');
 
     return NextResponse.json({
       success: true,
@@ -139,11 +174,12 @@ export async function POST(request) {
         totalScenes: analysis.totalScenes,
         characters: analysis.detectedCharacters,
         estimatedDuration: analysis.estimatedDuration
-      }
+      },
+      message: '✅ Phân tích hoàn tất! Đã tạo ' + analysis.totalScenes + ' cảnh với AI-powered prompts.'
     });
 
   } catch (error) {
-    console.error('Error:', error);
+    console.error('\n❌ CRITICAL ERROR:', error);
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }
@@ -152,32 +188,58 @@ export async function POST(request) {
 }
 
 // =====================================
-// HÀM PHÂN TÍCH VĂN BẢN
+// ⭐ HÀM PHÂN TÍCH VĂN BẢN - UPGRADED WITH LLM
 // =====================================
 async function analyzeChapterWithAI(content, series) {
+  console.log('\n🔍 Analyzing chapter with AI...');
+
   // Tách thành đoạn văn
   const rawParagraphs = content
     .split('\n\n')
     .map(p => p.trim())
     .filter(p => p.length > 0);
 
+  console.log(`📄 Found ${rawParagraphs.length} paragraphs`);
+
   const paragraphs = [];
   let totalScenes = 0;
+  let totalCost = 0;
 
-  // Phân tích từng đoạn
+  // Phân tích từng đoạn VỚI LLM
   for (let i = 0; i < rawParagraphs.length; i++) {
     const paraContent = rawParagraphs[i];
-    
-    const sceneType = detectSceneType(paraContent);
-    const mentionedChars = detectCharacters(paraContent, series.characters || []);
-    const location = detectLocation(paraContent);
-    const mood = detectMood(paraContent);
 
-    const scenes = createScenesFromParagraph(
+    console.log(`\n[${i + 1}/${rawParagraphs.length}] Analyzing paragraph...`);
+
+    // ⭐ SỬ DỤNG LLM THAY VÌ KEYWORD-BASED
+    const aiAnalysis = await analyzeSceneWithLLM(
       paraContent,
-      sceneType,
+      series.genre,
+      series.characters || []
+    );
+
+    // Track cost
+    if (aiAnalysis._metadata?.cost) {
+      totalCost += aiAnalysis._metadata.cost;
+    }
+
+    // Match characters với database
+    const mentionedChars = (series.characters || []).filter(char =>
+      aiAnalysis.characters_mentioned?.some(name =>
+        name.toLowerCase().includes(char.name.toLowerCase()) ||
+        char.name.toLowerCase().includes(name.toLowerCase())
+      )
+    );
+
+    console.log(`  ✓ Type: ${aiAnalysis.scene_type}`);
+    console.log(`  ✓ Characters: ${mentionedChars.length}`);
+    console.log(`  ✓ Mood: ${aiAnalysis.mood}`);
+
+    // ⭐ TẠO SCENES VỚI AI-ENHANCED PROMPTS
+    const scenes = await createScenesFromParagraphML(
+      paraContent,
+      aiAnalysis,
       mentionedChars,
-      location,
       series
     );
 
@@ -186,15 +248,17 @@ async function analyzeChapterWithAI(content, series) {
     paragraphs.push({
       number: i + 1,
       content: paraContent,
-      type: sceneType,
+      type: aiAnalysis.scene_type,
       characterIds: mentionedChars.map(c => c.id),
-      location: location,
-      mood: mood,
+      location: aiAnalysis.location,
+      mood: aiAnalysis.mood,
       scenes: scenes
     });
   }
 
-  const avgSceneDuration = 15;
+  console.log(`\n💰 Total AI cost: $${totalCost.toFixed(4)}`);
+
+  const avgSceneDuration = SCENE_CONFIG.AVG_DURATION_SECONDS;
   const totalSeconds = totalScenes * avgSceneDuration;
   const minutes = Math.ceil(totalSeconds / 60);
 
@@ -202,144 +266,61 @@ async function analyzeChapterWithAI(content, series) {
     paragraphs,
     totalScenes,
     estimatedDuration: `${minutes} phút`,
-    detectedCharacters: [...new Set(paragraphs.flatMap(p => p.characterIds))]
+    detectedCharacters: [...new Set(paragraphs.flatMap(p => p.characterIds))],
+    totalCost
   };
 }
 
-function detectSceneType(text) {
-  const lowerText = text.toLowerCase();
-  
-  if (text.includes('"') || text.includes('"') || text.includes('"')) {
-    return 'dialogue';
-  }
-  
-  const actionKeywords = ['chiến', 'đánh', 'bay', 'nhảy', 'chạy', 'tấn công'];
-  if (actionKeywords.some(kw => lowerText.includes(kw))) {
-    return 'action';
-  }
-  
-  return 'description';
-}
-
-function detectCharacters(text, characters) {
-  const mentioned = [];
-  
-  for (const char of characters) {
-    const nameParts = char.name.split(' ');
-    
-    if (text.includes(char.name)) {
-      mentioned.push(char);
-      continue;
-    }
-    
-    if (nameParts.length >= 2) {
-      const shortName = nameParts.slice(-2).join(' ');
-      if (text.includes(shortName)) {
-        mentioned.push(char);
-      }
-    }
-  }
-  
-  return mentioned;
-}
-
-function detectLocation(text) {
-  const locations = {
-    'núi': 'Mountain peak',
-    'rừng': 'Dense forest',
-    'động': 'Cave',
-    'thành': 'Ancient city',
-    'cung điện': 'Palace hall',
-    'làng': 'Village'
-  };
-  
-  const lowerText = text.toLowerCase();
-  for (const [keyword, location] of Object.entries(locations)) {
-    if (lowerText.includes(keyword)) {
-      return location;
-    }
-  }
-  
-  return 'Unspecified location';
-}
-
-function detectMood(text) {
-  const moods = {
-    'tense': ['căng thẳng', 'nguy hiểm', 'lo lắng'],
-    'peaceful': ['yên bình', 'thanh tịnh', 'tĩnh lặng'],
-    'dramatic': ['kịch tính', 'bùng nổ', 'dữ dội']
-  };
-  
-  const lowerText = text.toLowerCase();
-  for (const [mood, keywords] of Object.entries(moods)) {
-    if (keywords.some(kw => lowerText.includes(kw))) {
-      return mood;
-    }
-  }
-  
-  return 'neutral';
-}
-
-function createScenesFromParagraph(content, sceneType, characters, location, series) {
+// ⭐ TẠO SCENES VỚI ML-POWERED PROMPTS
+async function createScenesFromParagraphML(content, aiAnalysis, characters, series) {
   const scenes = [];
   const sentences = content.split(/[.!?。！？]/).filter(s => s.trim().length > 0);
-  const numScenes = Math.max(1, Math.min(3, Math.ceil(sentences.length / 3)));
-  
+  const numScenes = Math.max(1, Math.min(
+    SCENE_CONFIG.MAX_SCENES_PER_PARAGRAPH,
+    Math.ceil(sentences.length / 3)
+  ));
+
   for (let i = 0; i < numScenes; i++) {
     const startIdx = Math.floor(i * sentences.length / numScenes);
     const endIdx = Math.floor((i + 1) * sentences.length / numScenes);
     const sceneContent = sentences.slice(startIdx, endIdx).join('. ') + '.';
-    
-    const visualPrompt = buildVisualPrompt(
-      sceneContent,
-      sceneType,
-      characters,
-      location,
-      series.genre
+
+    // ⭐ GENERATE ENHANCED PROMPT VỚI LLM
+    const { visualPrompt, negativePrompt } = await generateEnhancedPrompt(
+      aiAnalysis,
+      series.genre,
+      characters
     );
-    
+
     const characterPrompts = {};
     characters.forEach(char => {
       characterPrompts[char.id] = char.appearance_prompt || '';
     });
-    
+
     scenes.push({
       description: sceneContent.substring(0, 500),
-      dialogue: sceneType === 'dialogue' ? extractDialogue(sceneContent) : null,
+      dialogue: aiAnalysis.scene_type?.includes('dialogue')
+        ? extractDialogue(sceneContent)
+        : null,
       visualPrompt: visualPrompt,
-      negativePrompt: 'blurry, low quality, distorted faces',
-      location: location,
-      timeOfDay: 'day',
+      negativePrompt: negativePrompt,
+      location: aiAnalysis.location,
+      timeOfDay: aiAnalysis.time_of_day || 'day',
       characterIds: characters.map(c => c.id),
       characterPrompts: characterPrompts,
-      cameraMovement: sceneType === 'action' ? 'dynamic' : 'static',
-      duration: Math.floor(Math.random() * 10) + 10,
-      motionIntensity: sceneType === 'action' ? 'high' : 'medium'
+      cameraMovement: aiAnalysis.camera_movement || 'static',
+      duration: Math.floor(Math.random() *
+        (SCENE_CONFIG.MAX_DURATION_SECONDS - SCENE_CONFIG.MIN_DURATION_SECONDS)) +
+        SCENE_CONFIG.MIN_DURATION_SECONDS,
+      motionIntensity: aiAnalysis.scene_type === 'action' ? 'high' : 'medium'
     });
   }
-  
+
   return scenes;
 }
 
-function buildVisualPrompt(content, sceneType, characters, location, genre) {
-  let prompt = 'cinematic style, ';
-  
-  if (characters.length > 0) {
-    prompt += characters.map(c => c.appearance_prompt || c.name).join(', ') + ', ';
-  }
-  
-  prompt += `${location}, `;
-  
-  if (sceneType === 'action') {
-    prompt += 'dynamic action, ';
-  }
-  
-  prompt += 'high quality, detailed, 4k';
-  
-  return prompt;
-}
-
+// Helper function để extract dialogue
 function extractDialogue(text) {
-  const matches = text.match(/"([^"]+)"/g);
+  const matches = text.match(/"([^"]+)"|"([^"]+)"|"([^"]+)"/g);
   return matches ? matches.join(' ') : null;
 }
