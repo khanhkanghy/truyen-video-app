@@ -25,7 +25,12 @@ export default function NewChapterUpload() {
     title: '',
     content: ''
   });
-  
+
+  // ⭐ NEW: Director mode options
+  const [useDirectorMode, setUseDirectorMode] = useState(true); // Default to director mode
+  const [userPrompt, setUserPrompt] = useState('');
+  const [showCustomPrompt, setShowCustomPrompt] = useState(false);
+
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState(null);
   const [formErrors, setFormErrors] = useState({});
@@ -147,41 +152,70 @@ export default function NewChapterUpload() {
     }
   };
 
-  // Analyze chapter
+  // ⭐ UPDATED: Analyze chapter with Director Mode support
   const handleAnalyzeChapter = async () => {
     if (!validateChapterForm()) return;
 
     setAnalyzing(true);
     setError(null);
-    
+
     try {
-      const response = await fetch('/api/chapters/analyze', {
+      // ⭐ Choose API endpoint based on mode
+      const apiEndpoint = useDirectorMode
+        ? '/api/chapters/analyze-director'
+        : '/api/chapters/analyze';
+
+      console.log(`🎬 Using ${useDirectorMode ? 'DIRECTOR MODE' : 'STANDARD MODE'}`);
+      if (useDirectorMode && userPrompt) {
+        console.log(`📝 Custom prompt: ${userPrompt}`);
+      }
+
+      const requestBody = {
+        seriesId: selectedSeries,
+        ...chapterData
+      };
+
+      // ⭐ Add user prompt if director mode
+      if (useDirectorMode && userPrompt.trim()) {
+        requestBody.userPrompt = userPrompt.trim();
+      }
+
+      const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          seriesId: selectedSeries,
-          ...chapterData
-        })
+        body: JSON.stringify(requestBody)
       });
 
       const data = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(data.error || 'Có lỗi xảy ra khi phân tích');
       }
-      
+
       if (data.success) {
         setResult(data);
-        
+
         // Reset form
         setChapterData({
           chapterNumber: chapterData.chapterNumber + 1,
           title: '',
           content: ''
         });
-        
-        // Thông báo
-        alert('✅ Phân tích hoàn tất! Đã tạo ' + data.analysis.totalScenes + ' cảnh.');
+
+        // Reset custom prompt sau khi thành công
+        if (useDirectorMode) {
+          setUserPrompt('');
+        }
+
+        // ⭐ Thông báo có thông tin mode
+        const mode = useDirectorMode ? '🎬 DIRECTOR MODE' : 'Standard';
+        const sceneCount = data.analysis?.total_scenes || data.analysis?.totalScenes || 0;
+        const message = `✅ Phân tích hoàn tất với ${mode}!\n\n` +
+          `📊 Đã tạo ${sceneCount} cảnh chuyên nghiệp.\n` +
+          (data.analysis?.story_summary ? `📖 ${data.analysis.story_summary}\n` : '') +
+          (data.analysis?.cost ? `💰 Chi phí AI: $${data.analysis.cost.toFixed(4)}` : '');
+
+        alert(message);
       } else {
         throw new Error(data.error || 'Phân tích thất bại');
       }
@@ -452,11 +486,88 @@ Trên đỉnh núi Thái Sơn, mây mù bao phủ. Lý Tiểu Long ngồi xếp 
                 </div>
               </div>
 
+              {/* ⭐ NEW: SECTION 4: AI Director Mode Options */}
+              <div className="mb-6">
+                <label className="block text-white text-lg font-semibold mb-4">
+                  🎬 Tùy chọn AI:
+                </label>
+
+                {/* Director Mode Toggle */}
+                <div className="bg-white/5 border border-white/20 rounded-xl p-5 mb-4">
+                  <div className="flex items-start gap-4">
+                    <input
+                      type="checkbox"
+                      id="directorMode"
+                      checked={useDirectorMode}
+                      onChange={(e) => setUseDirectorMode(e.target.checked)}
+                      className="mt-1 w-5 h-5 rounded border-white/30 bg-white/10 text-purple-600 focus:ring-2 focus:ring-purple-500"
+                    />
+                    <div className="flex-1">
+                      <label htmlFor="directorMode" className="text-white font-semibold cursor-pointer flex items-center gap-2">
+                        <Film size={20} className="text-purple-400" />
+                        <span>Director Mode - AI Đạo diễn chuyên nghiệp</span>
+                        <span className="ml-2 px-2 py-0.5 bg-green-500/20 text-green-300 text-xs rounded-full">
+                          Recommended
+                        </span>
+                      </label>
+                      <p className="mt-2 text-white/60 text-sm leading-relaxed">
+                        ✨ AI sẽ phân tích toàn bộ chapter như một <strong>đạo diễn điện ảnh</strong>, tự động chia thành các cảnh quay hợp lý dựa trên logic kịch bản (không phải theo xuống dòng). Mỗi cảnh sẽ có đầy đủ thông tin: camera angles, lighting, mood, dialogue, visual description chi tiết.
+                      </p>
+                      <p className="mt-1 text-white/50 text-xs">
+                        💰 Chi phí: ~$0.05-0.15/chapter (dùng GPT-4o) | Chất lượng: ⭐⭐⭐⭐⭐
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Custom Prompt (chỉ hiện khi Director Mode ON) */}
+                {useDirectorMode && (
+                  <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <label className="text-white font-semibold flex items-center gap-2">
+                        <Zap size={18} className="text-blue-400" />
+                        <span>Yêu cầu tùy chỉnh (Tùy chọn)</span>
+                      </label>
+                      <button
+                        onClick={() => setShowCustomPrompt(!showCustomPrompt)}
+                        className="text-blue-300 hover:text-blue-200 text-sm transition-colors"
+                      >
+                        {showCustomPrompt ? '🔽 Ẩn' : '▶️ Mở rộng'}
+                      </button>
+                    </div>
+
+                    {showCustomPrompt && (
+                      <div className="mt-3">
+                        <textarea
+                          value={userPrompt}
+                          onChange={(e) => setUserPrompt(e.target.value)}
+                          placeholder="VD:
+- Tập trung vào cảm xúc nhân vật
+- Chia thành nhiều cảnh ngắn (5-10s mỗi cảnh)
+- Mô tả chi tiết hiệu ứng võ thuật
+- Thêm nhiều góc máy động
+- Nhấn mạnh vào ánh sáng và bầu không khí
+- ..."
+                          className="w-full h-32 p-3 bg-white/5 border border-blue-500/30 rounded-lg text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none text-sm"
+                        />
+                        <p className="mt-2 text-blue-300/70 text-xs">
+                          💡 Tip: Viết rõ ràng yêu cầu của bạn, AI sẽ tuân theo khi phân tích!
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* Analyze Button */}
               <button
                 onClick={handleAnalyzeChapter}
                 disabled={analyzing || !chapterData.content}
-                className="w-full py-4 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 shadow-lg hover:shadow-xl"
+                className={`w-full py-4 font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 shadow-lg hover:shadow-xl ${
+                  useDirectorMode
+                    ? 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white'
+                    : 'bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white'
+                }`}
               >
                 {analyzing ? (
                   <>
@@ -465,8 +576,10 @@ Trên đỉnh núi Thái Sơn, mây mù bao phủ. Lý Tiểu Long ngồi xếp 
                   </>
                 ) : (
                   <>
-                    <Zap size={20} />
-                    <span>Phân tích & Tạo cảnh</span>
+                    {useDirectorMode ? <Film size={20} /> : <Zap size={20} />}
+                    <span>
+                      {useDirectorMode ? '🎬 Phân tích với AI Đạo diễn' : 'Phân tích & Tạo cảnh'}
+                    </span>
                   </>
                 )}
               </button>
